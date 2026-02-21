@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Viewer Pro</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root {
+    --bg:       #0d1117;
+    --surface:  #161b22;
+    --surface2: #1c2333;
+    --border:   #30363d;
+    --text:     #e6edf3;
+    --muted:    #8b949e;
+    --accent:   #58a6ff;
+    --red:      #f85149;
+    --green:    #3fb950;
+    --radius:   6px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ── Topbar ── */
+.topbar { background: var(--surface); padding: 6px 12px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; z-index: 100; }
+.topbar h1 { font-size: 15px; color: var(--accent); white-space: nowrap; letter-spacing: -.3px; }
+.topbar h1 span { color: var(--muted); font-weight: 400; font-size: 11px; margin-left: 4px; }
+.btn { background: var(--surface2); color: var(--text); border: 1px solid var(--border); padding: 5px 12px; border-radius: var(--radius); cursor: pointer; font-size: 12px; white-space: nowrap; transition: all .15s; display: inline-flex; align-items: center; gap: 4px; }
+.btn:hover { border-color: var(--accent); background: #1f2937; }
+.btn.danger:hover { border-color: var(--red); color: var(--red); }
+.btn.active { border-color: var(--accent); background: rgba(88,166,255,.15); color: var(--accent); }
+.btn.primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
+.btn.primary:hover { background: #79b8ff; }
+.btn-icon { padding: 5px 7px; font-size: 14px; }
+.sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
+.stats { font-size: 11px; color: var(--muted); margin-left: auto; display: flex; gap: 12px; }
+.stats b { color: var(--text); }
+
+/* ── Main ── */
+.main { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Sidebar ── */
+.sidebar { width: 280px; min-width: 220px; max-width: 400px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; transition: width .2s; }
+.sidebar.hidden { width: 0; min-width: 0; overflow: hidden; border-right: none; }
+.sidebar-header { padding: 8px; border-bottom: 1px solid var(--border); display: flex; gap: 6px; align-items: center; }
+.sidebar-header input { flex:1; padding: 5px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 12px; outline: none; }
+.sidebar-header input:focus { border-color: var(--accent); }
+.sidebar-header .sort-btn { font-size: 11px; padding: 4px 8px; }
+.file-list { flex: 1; overflow-y: auto; }
+.file-item { padding: 8px 10px; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 12px; display: flex; align-items: center; gap: 6px; transition: background .1s; position: relative; }
+.file-item:hover { background: var(--surface2); }
+.file-item.active { background: rgba(88,166,255,.1); border-left: 3px solid var(--accent); }
+.file-item .icon { font-size: 14px; flex-shrink: 0; }
+.file-item .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; cursor: pointer; }
+.file-item .size { color: var(--muted); font-size: 10px; flex-shrink: 0; }
+.file-item .del-btn { display: none; background: none; border: none; color: var(--red); cursor: pointer; font-size: 14px; padding: 2px 4px; flex-shrink: 0; border-radius: 3px; }
+.file-item:hover .del-btn { display: block; }
+.file-item:hover .size { display: none; }
+.file-item .idx { color: var(--muted); font-size: 10px; flex-shrink: 0; min-width: 20px; text-align: right; }
+
+/* ── Viewer ── */
+.viewer { flex: 1; display: flex; flex-direction: column; background: var(--bg); position: relative; }
+.viewer-nav { display: flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.viewer-nav .title { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 80px; }
+
+/* ── PDF iframe (Edge native viewer) ── */
+.pdf-frame { flex: 1; border: none; background: #525659; }
+
+/* ── Empty state ── */
+.empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); }
+.empty .big-icon { font-size: 56px; opacity: .6; }
+.empty p { font-size: 14px; }
+.drop-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 36px; text-align: center; cursor: pointer; transition: border-color .2s; }
+.drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); }
+
+/* ── Snip Overlay (full-screen over iframe) ── */
+.snip-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.85); z-index: 300; display: none; flex-direction: column; }
+.snip-modal-overlay.active { display: flex; }
+.snip-toolbar { background: var(--surface); padding: 8px 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.snip-toolbar .page-info { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+.snip-toolbar .page-info input { width: 40px; text-align: center; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; color: var(--text); font-size: 12px; padding: 2px; }
+.snip-toolbar .hint { font-size: 11px; color: var(--muted); margin-left: 12px; }
+.snip-canvas-wrap { flex: 1; overflow: auto; display: flex; justify-content: center; align-items: flex-start; padding: 16px; position: relative; }
+.snip-canvas-wrap canvas { box-shadow: 0 2px 16px rgba(0,0,0,.5); cursor: crosshair; }
+.snip-rect { position: absolute; border: 2px dashed var(--accent); background: rgba(88,166,255,.1); pointer-events: none; z-index: 10; }
+
+/* ── OCR Result ── */
+.ocr-popup { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); background: var(--surface); border: 1px solid var(--accent); border-radius: 10px; padding: 0; z-index: 400; box-shadow: 0 8px 30px rgba(0,0,0,.6); min-width: 400px; max-width: 600px; display: none; }
+.ocr-popup.active { display: block; }
+.ocr-popup-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.ocr-popup-header h3 { font-size: 14px; color: var(--accent); }
+.ocr-popup-body { padding: 16px; max-height: 400px; overflow-y: auto; }
+.ocr-popup-body textarea { width: 100%; min-height: 120px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 13px; padding: 10px; resize: vertical; font-family: 'Consolas', monospace; }
+.ocr-popup-body img { max-width: 100%; border-radius: 4px; margin-bottom: 10px; border: 1px solid var(--border); }
+.ocr-popup-footer { padding: 10px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ── Settings Modal ── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 500; display: none; align-items: center; justify-content: center; }
+.modal-overlay.active { display: flex; }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0; min-width: 420px; max-width: 520px; }
+.modal-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.modal-header h3 { font-size: 15px; }
+.modal-body { padding: 18px; }
+.modal-body label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; margin-top: 12px; }
+.modal-body label:first-child { margin-top: 0; }
+.modal-body input[type="text"], .modal-body input[type="password"] { width: 100%; padding: 7px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 13px; font-family: 'Consolas', monospace; }
+.modal-body input:focus { border-color: var(--accent); outline: none; }
+.modal-body .hint { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.modal-footer { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ── Toast ── */
+.toast { position: fixed; bottom: 20px; right: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 16px; font-size: 13px; z-index: 600; box-shadow: 0 4px 16px rgba(0,0,0,.4); opacity: 0; transform: translateY(10px); transition: all .3s; pointer-events: none; }
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.success { border-color: var(--green); }
+.toast.error { border-color: var(--red); }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+kbd { display: inline-block; background: var(--surface2); padding: 1px 5px; border-radius: 3px; font-size: 10px; font-family: monospace; color: var(--muted); border: 1px solid var(--border); }
+
+/* ── Resize handle ── */
+.resize-handle { width: 4px; cursor: col-resize; background: transparent; flex-shrink: 0; }
+.resize-handle:hover { background: var(--accent); }
+
+/* ── Sidebar folders ── */
+.sidebar-folders { padding: 4px 8px; border-bottom: 1px solid var(--border); }
+.folder-select { width: 100%; padding: 4px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 11px; cursor: pointer; }
+.folder-select:focus { border-color: var(--accent); outline: none; }
+.folder-group { padding: 6px 10px; font-size: 10px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: .4px; background: var(--surface2); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 4px; }
+.folder-group .folder-icon { font-size: 12px; }
+.folder-group .folder-count { margin-left: auto; color: var(--muted); font-weight: 400; font-size: 10px; }
+.file-item .file-path { font-size: 9px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<!-- ═══ Topbar ═══ -->
+<div class="topbar">
+    <h1>PDF Viewer <span>Pro</span></h1>
+    <button class="btn" id="loadFolderBtn">&#128193; Folder</button>
+    <button class="btn" id="loadFilesBtn">&#128196; Files</button>
+    <div class="sep"></div>
+    <button class="btn btn-icon" id="toggleSidebar" title="Toggle sidebar (S)">&#9776;</button>
+    <button class="btn" id="snipBtn" title="Snip &amp; OCR (X) &#8212; opens PDF.js overlay to draw &amp; OCR">&#9986; Snip</button>
+    <button class="btn danger" id="clearAllBtn" title="Remove all files">&#128465; Clear</button>
+    <div class="sep"></div>
+    <button class="btn btn-icon" id="settingsBtn" title="Settings">&#9881;</button>
+    <div class="stats" id="stats"></div>
+</div>
+
+<!-- ═══ Main ═══ -->
+<div class="main">
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <input type="text" id="searchInput" placeholder="Search files...">
+            <button class="btn sort-btn" id="sortBtn" title="Sort files">A&#8595;</button>
+        </div>
+        <div class="sidebar-folders" id="folderFilter" style="display:none">
+            <select id="folderSelect" class="folder-select" title="Filter by folder">
+                <option value="">All folders</option>
+            </select>
+        </div>
+        <div class="file-list" id="fileList"></div>
+    </div>
+    <div class="resize-handle" id="resizeHandle"></div>
+
+    <!-- Viewer -->
+    <div class="viewer" id="viewer">
+        <!-- Nav bar (file prev/next only — Edge handles page/zoom) -->
+        <div class="viewer-nav" id="viewerNav" style="display:none">
+            <button class="btn btn-icon" id="prevFile" title="Previous file (&#8592;)">&#9198;</button>
+            <span class="title" id="pdfTitle"></span>
+            <button class="btn btn-icon" id="nextFile" title="Next file (&#8594;)">&#9197;</button>
+        </div>
+        <!-- Edge native PDF viewer via iframe -->
+        <iframe class="pdf-frame" id="pdfFrame" style="display:none"></iframe>
+        <!-- Empty state -->
+        <div class="empty" id="emptyState">
+            <div class="drop-zone" id="dropZone">
+                <div class="big-icon">&#128196;</div>
+                <p>Drop PDF folder here</p>
+                <p style="font-size:12px; color:var(--muted); margin-top:4px">or click <b>Folder</b> / <b>Files</b> above</p>
+                <p style="font-size:11px; color:var(--muted); margin-top:12px">Files persist in browser storage across sessions</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ Snip Overlay (PDF.js canvas for OCR snipping) ═══ -->
+<div class="snip-modal-overlay" id="snipModal">
+    <div class="snip-toolbar">
+        <button class="btn btn-icon" id="snipPrevPage" title="Previous page">&#9664;</button>
+        <div class="page-info">
+            Page <input type="text" id="snipPageInput" value="1"> / <span id="snipTotalPages">0</span>
+        </div>
+        <button class="btn btn-icon" id="snipNextPage" title="Next page">&#9654;</button>
+        <div class="sep"></div>
+        <span class="hint">&#9986; Draw a rectangle on the page to OCR &nbsp;|&nbsp; <kbd>Esc</kbd> to close</span>
+        <div style="flex:1"></div>
+        <button class="btn" id="snipClose">&#10005; Close</button>
+    </div>
+    <div class="snip-canvas-wrap" id="snipCanvasWrap">
+        <canvas id="snipCanvas"></canvas>
+    </div>
+</div>
+
+<!-- ═══ OCR Result Popup ═══ -->
+<div class="ocr-popup" id="ocrPopup">
+    <div class="ocr-popup-header">
+        <h3>&#128221; OCR Result</h3>
+        <button class="btn btn-icon" id="ocrClose">&#10005;</button>
+    </div>
+    <div class="ocr-popup-body">
+        <img id="ocrSnipImg">
+        <textarea id="ocrText" readonly></textarea>
+    </div>
+    <div class="ocr-popup-footer">
+        <button class="btn" id="ocrCopy">&#128203; Copy Text</button>
+        <button class="btn" id="ocrClose2">Close</button>
+    </div>
+</div>
+
+<!-- ═══ Settings Modal ═══ -->
+<div class="modal-overlay" id="settingsOverlay">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>&#9881; Settings</h3>
+            <button class="btn btn-icon" id="settingsClose">&#10005;</button>
+        </div>
+        <div class="modal-body">
+            <label>Nanonets API Key</label>
+            <input type="password" id="settApiKey" placeholder="Enter your Nanonets API key">
+            <div class="hint">Get it from app.nanonets.com &rarr; API Keys</div>
+            <label>Nanonets Model ID</label>
+            <input type="text" id="settModelId" placeholder="Enter OCR model ID">
+            <div class="hint">Go to Models &rarr; select your OCR model &rarr; copy the Model ID from URL</div>
+            <label>Snip Render Scale</label>
+            <input type="text" id="settScale" placeholder="2" value="2">
+            <div class="hint">Quality of snapshots for OCR. 1.5&ndash;3 recommended.</div>
+            <label style="margin-top:16px; color:var(--text); font-size:13px">Storage Info</label>
+            <div id="storageInfo" style="font-size:12px; color:var(--muted); margin-top:4px;"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn danger" id="settClearDb">&#128465; Clear Storage</button>
+            <button class="btn primary" id="settSave">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Hidden file inputs -->
+<input type="file" id="folderInput" webkitdirectory multiple style="display:none">
+<input type="file" id="filesInput" multiple accept=".pdf,.tmp" style="display:none">
+
+<script>
+// ================================================================
+//  PDF.js (only used for snipping, NOT for main viewing)
+// ================================================================
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ================================================================
+//  IndexedDB
+// ================================================================
+var DB_NAME = 'PDFViewerPro', DB_VER = 1, S_FILES = 'files', S_SETTINGS = 'settings';
+
+function openDB() {
+    return new Promise(function(resolve, reject) {
+        var req = indexedDB.open(DB_NAME, DB_VER);
+        req.onupgradeneeded = function(e) {
+            var db = e.target.result;
+            if (!db.objectStoreNames.contains(S_FILES)) db.createObjectStore(S_FILES, { keyPath:'id', autoIncrement:true });
+            if (!db.objectStoreNames.contains(S_SETTINGS)) db.createObjectStore(S_SETTINGS, { keyPath:'key' });
+        };
+        req.onsuccess = function() { resolve(req.result); };
+        req.onerror = function() { reject(req.error); };
+    });
+}
+async function dbGetAll(store) {
+    var db = await openDB();
+    return new Promise(function(res, rej) { var r = db.transaction(store,'readonly').objectStore(store).getAll(); r.onsuccess=function(){res(r.result);}; r.onerror=function(){rej(r.error);}; });
+}
+async function dbPut(store, item) {
+    var db = await openDB();
+    return new Promise(function(res, rej) { var r = db.transaction(store,'readwrite').objectStore(store).put(item); r.onsuccess=function(){res(r.result);}; r.onerror=function(){rej(r.error);}; });
+}
+async function dbDelete(store, key) {
+    var db = await openDB();
+    return new Promise(function(res, rej) { var r = db.transaction(store,'readwrite').objectStore(store).delete(key); r.onsuccess=function(){res();}; r.onerror=function(){rej(r.error);}; });
+}
+async function dbClear(store) {
+    var db = await openDB();
+    return new Promise(function(res, rej) { var r = db.transaction(store,'readwrite').objectStore(store).clear(); r.onsuccess=function(){res();}; r.onerror=function(){rej(r.error);}; });
+}
+async function getSetting(key, fallback) {
+    try { var all = await dbGetAll(S_SETTINGS); var f = all.find(function(i){return i.key===key;}); return f ? f.value : (fallback||''); } catch(e) { return fallback||''; }
+}
+async function setSetting(key, value) { return dbPut(S_SETTINGS, {key:key, value:value}); }
+
+// ================================================================
+//  State
+// ================================================================
+var pdfs = [];           // {id, name, path, folder, size, data: ArrayBuffer}
+var filtered = [];
+var activeIdx = -1;
+var activeBlobUrl = null;
+var sortAsc = true;
+var renderScale = 2;
+var activeFolder = '';   // empty = show all
+
+// Snip state
+var snipPdfDoc = null;
+var snipPage = 1;
+var snipTotalPages = 0;
+var snipStartPos = null;
+var snipRectEl = null;
+
+// DOM
+var fileList   = document.getElementById('fileList');
+var searchInput= document.getElementById('searchInput');
+var viewer     = document.getElementById('viewer');
+var emptyState = document.getElementById('emptyState');
+var viewerNav  = document.getElementById('viewerNav');
+var pdfFrame   = document.getElementById('pdfFrame');
+var statsEl    = document.getElementById('stats');
+var toastEl    = document.getElementById('toast');
+var snipModal  = document.getElementById('snipModal');
+var snipCanvas = document.getElementById('snipCanvas');
+var snipCtx    = snipCanvas.getContext('2d');
+var snipWrap   = document.getElementById('snipCanvasWrap');
+var ocrPopup   = document.getElementById('ocrPopup');
+var settingsOv = document.getElementById('settingsOverlay');
+
+// ================================================================
+//  Init — restore from IndexedDB
+// ================================================================
+(async function init() {
+    renderScale = parseFloat(await getSetting('renderScale','2')) || 2;
+    try {
+        var stored = await dbGetAll(S_FILES);
+        if (stored.length > 0) {
+            pdfs = stored.map(function(s){ return {id:s.id, name:s.name, path:s.path||'', folder:s.folder||'', size:s.size, data:s.data}; });
+            filtered = pdfs.slice();
+            sortFiles(); buildFolderFilter(); renderList(); updateStats();
+            showToast('Loaded ' + pdfs.length + ' PDFs from storage', 'success');
+            if (pdfs.length > 0) selectPdf(0);
+        }
+    } catch(e) { console.error('DB load error', e); }
+    document.getElementById('settApiKey').value = await getSetting('nanonetsApiKey');
+    document.getElementById('settModelId').value = await getSetting('nanonetsModelId');
+    document.getElementById('settScale').value = renderScale;
+    updateStorageInfo();
+})();
+
+// ================================================================
+//  File Loading
+// ================================================================
+document.getElementById('loadFolderBtn').onclick = function(){ document.getElementById('folderInput').click(); };
+document.getElementById('loadFilesBtn').onclick  = function(){ document.getElementById('filesInput').click(); };
+document.getElementById('folderInput').onchange   = function(e){ addFiles(e.target.files); };
+document.getElementById('filesInput').onchange    = function(e){ addFiles(e.target.files); };
+
+// Drag & drop
+document.body.addEventListener('dragover', function(e){ e.preventDefault(); var dz=document.getElementById('dropZone'); if(dz) dz.classList.add('dragover'); });
+document.body.addEventListener('dragleave', function(){ var dz=document.getElementById('dropZone'); if(dz) dz.classList.remove('dragover'); });
+document.body.addEventListener('drop', async function(e){
+    e.preventDefault();
+    var dz=document.getElementById('dropZone'); if(dz) dz.classList.remove('dragover');
+    var entries=[];
+    for(var i=0;i<e.dataTransfer.items.length;i++){
+        var item=e.dataTransfer.items[i];
+        var entry=item.webkitGetAsEntry?item.webkitGetAsEntry():null;
+        if(entry) entries.push(entry);
+    }
+    if(entries.length>0){ addFiles(await readEntries(entries)); }
+    else{ addFiles(e.dataTransfer.files); }
+});
+
+async function readEntries(entries){
+    var files=[];
+    for(var i=0;i<entries.length;i++){
+        if(entries[i].isFile) files.push(await new Promise(function(r){entries[i].file(r);}));
+        else if(entries[i].isDirectory){
+            var reader=entries[i].createReader();
+            var children=await new Promise(function(r){reader.readEntries(r);});
+            var sub=await readEntries(children);
+            for(var j=0;j<sub.length;j++) files.push(sub[j]);
+        }
+    }
+    return files;
+}
+
+async function addFiles(fileListIn){
+    var arr=Array.from(fileListIn).filter(function(f){ var n=f.name.toLowerCase(); return n.endsWith('.pdf') || n.endsWith('.tmp'); });
+    if(!arr.length){ showToast('No PDF or TMP files found','error'); return; }
+    var added=0;
+    for(var i=0;i<arr.length;i++){
+        var f=arr[i];
+        // Use webkitRelativePath for folder structure (County/YYYY-MM/file.pdf)
+        var relPath = f.webkitRelativePath || f.name;
+        // Strip leading top-level folder name (e.g. "SurrogateCourt/Richmond/2026-01/file.pdf" → "Richmond/2026-01/file.pdf")
+        var pathParts = relPath.split('/');
+        if(pathParts.length > 2) pathParts.shift(); // Remove root folder
+        var displayPath = pathParts.join('/');
+        // Folder = everything except the filename
+        var folder = pathParts.length > 1 ? pathParts.slice(0, -1).join('/') : '';
+        var uniqueKey = displayPath || f.name;
+        if(pdfs.some(function(p){return (p.path||p.name)===uniqueKey;})) continue;
+        var data=await f.arrayBuffer();
+        var entry={name:f.name, path: uniqueKey, folder: folder, size:f.size, data:data};
+        entry.id=await dbPut(S_FILES, entry);
+        pdfs.push(entry);
+        added++;
+    }
+    filtered=pdfs.slice(); sortFiles(); renderList(); updateStats(); updateStorageInfo(); buildFolderFilter();
+    if(added>0){
+        showToast('Added '+added+' PDF'+(added>1?'s':'')+' ('+pdfs.length+' total)','success');
+        if(activeIdx===-1) selectPdf(0);
+    } else { showToast('All files already loaded','error'); }
+}
+
+// ================================================================
+//  Sidebar / File List
+// ================================================================
+function sortFiles(){
+    filtered.sort(function(a,b){
+        // Sort by folder first, then by name within folder
+        var fa = (a.folder||'').toLowerCase(), fb = (b.folder||'').toLowerCase();
+        if(fa !== fb) return sortAsc ? fa.localeCompare(fb) : fb.localeCompare(fa);
+        var c=a.name.localeCompare(b.name,undefined,{numeric:true});
+        return sortAsc?c:-c;
+    });
+}
+document.getElementById('sortBtn').onclick=function(){
+    sortAsc=!sortAsc;
+    document.getElementById('sortBtn').textContent=sortAsc?'A\u2193':'Z\u2193';
+    sortFiles(); renderList();
+};
+searchInput.addEventListener('input',function(){
+    var q=searchInput.value.toLowerCase().trim();
+    filtered=pdfs.filter(function(p){
+        var matchQ = !q || p.name.toLowerCase().includes(q) || (p.path||'').toLowerCase().includes(q);
+        var matchF = !activeFolder || (p.folder||'')===activeFolder;
+        return matchQ && matchF;
+    });
+    sortFiles(); renderList();
+    if(filtered.length>0 && activeIdx<0) selectPdf(0);
+});
+document.getElementById('folderSelect').onchange=function(){
+    activeFolder=this.value;
+    var q=searchInput.value.toLowerCase().trim();
+    filtered=pdfs.filter(function(p){
+        var matchQ = !q || p.name.toLowerCase().includes(q) || (p.path||'').toLowerCase().includes(q);
+        var matchF = !activeFolder || (p.folder||'')===activeFolder;
+        return matchQ && matchF;
+    });
+    sortFiles(); renderList();
+    if(filtered.length>0) selectPdf(0);
+};
+
+function buildFolderFilter(){
+    var folders={};
+    pdfs.forEach(function(p){ if(p.folder) folders[p.folder]=(folders[p.folder]||0)+1; });
+    var sel=document.getElementById('folderSelect');
+    var keys=Object.keys(folders).sort();
+    sel.innerHTML='<option value="">All folders ('+pdfs.length+')</option>';
+    keys.forEach(function(f){ sel.innerHTML+='<option value="'+esc(f)+'">'+esc(f)+' ('+folders[f]+')</option>'; });
+    document.getElementById('folderFilter').style.display=keys.length>0?'':'none';
+}
+
+function renderList(){
+    fileList.innerHTML='';
+    var lastFolder='';
+    filtered.forEach(function(pdf,i){
+        // Folder group header
+        var folder=pdf.folder||'';
+        if(folder && folder!==lastFolder){
+            lastFolder=folder;
+            var count=filtered.filter(function(p){return (p.folder||'')===folder;}).length;
+            var grp=document.createElement('div');
+            grp.className='folder-group';
+            grp.innerHTML='<span class="folder-icon">\uD83D\uDCC1</span> '+esc(folder)+'<span class="folder-count">'+count+'</span>';
+            fileList.appendChild(grp);
+        }
+        var div=document.createElement('div');
+        div.className='file-item'+(i===activeIdx?' active':'');
+        div.innerHTML=
+            '<span class="idx">'+(i+1)+'</span>'+
+            '<span class="icon">\uD83D\uDCC4</span>'+
+            '<span class="name" title="'+esc(pdf.path||pdf.name)+'">'+esc(pdf.name)+'</span>'+
+            '<span class="size">'+formatSize(pdf.size)+'</span>'+
+            '<button class="del-btn" title="Remove">\u2715</button>';
+        div.querySelector('.name').onclick=(function(idx){return function(){selectPdf(idx);};})(i);
+        div.querySelector('.del-btn').onclick=(function(p,idx){return function(e){e.stopPropagation();deleteFile(p,idx);};})(pdf,i);
+        fileList.appendChild(div);
+    });
+}
+
+async function deleteFile(pdf,idx){
+    try{await dbDelete(S_FILES,pdf.id);}catch(e){}
+    pdfs=pdfs.filter(function(p){return p.id!==pdf.id;});
+    filtered=filtered.filter(function(p){return p.id!==pdf.id;});
+    renderList(); updateStats(); updateStorageInfo();
+    if(!filtered.length){activeIdx=-1;showEmpty();}
+    else{selectPdf(Math.min(idx,filtered.length-1));}
+    showToast('Removed: '+pdf.name,'success');
+}
+
+document.getElementById('clearAllBtn').onclick=async function(){
+    if(!confirm('Delete ALL '+pdfs.length+' PDFs from storage?')) return;
+    await dbClear(S_FILES);
+    pdfs=[]; filtered=[]; activeIdx=-1;
+    renderList(); updateStats(); updateStorageInfo(); showEmpty();
+    showToast('All files cleared','success');
+};
+
+function showEmpty(){
+    viewerNav.style.display='none';
+    pdfFrame.style.display='none';
+    if(activeBlobUrl){ URL.revokeObjectURL(activeBlobUrl); activeBlobUrl=null; }
+    if(!document.getElementById('emptyState')){
+        var e=document.createElement('div'); e.className='empty'; e.id='emptyState';
+        e.innerHTML='<div class="drop-zone" id="dropZone"><div class="big-icon">\uD83D\uDCC4</div><p>Drop PDF folder here</p></div>';
+        viewer.appendChild(e);
+    } else { document.getElementById('emptyState').style.display=''; }
+}
+
+// ================================================================
+//  PDF Viewing — Edge native via <iframe> blob URL
+// ================================================================
+function selectPdf(idx){
+    if(idx<0||idx>=filtered.length) return;
+    activeIdx=idx;
+    var pdf=filtered[idx];
+
+    // Hide empty state
+    var es=document.getElementById('emptyState'); if(es) es.style.display='none';
+
+    // Show nav + iframe
+    viewerNav.style.display='';
+    pdfFrame.style.display='';
+
+    document.getElementById('pdfTitle').textContent=(idx+1)+'/'+filtered.length+' \u2014 '+pdf.name;
+    document.getElementById('prevFile').disabled=(idx===0);
+    document.getElementById('nextFile').disabled=(idx===filtered.length-1);
+
+    // Create blob URL and load in iframe → Edge native PDF viewer
+    if(activeBlobUrl) URL.revokeObjectURL(activeBlobUrl);
+    var blob=new Blob([pdf.data],{type:'application/pdf'});
+    activeBlobUrl=URL.createObjectURL(blob);
+    pdfFrame.src=activeBlobUrl;
+
+    renderList();
+    var activeEl=fileList.querySelector('.file-item.active');
+    if(activeEl) activeEl.scrollIntoView({block:'nearest'});
+}
+
+document.getElementById('prevFile').onclick=function(){selectPdf(activeIdx-1);};
+document.getElementById('nextFile').onclick=function(){selectPdf(activeIdx+1);};
+
+// ================================================================
+//  Snip Tool — PDF.js canvas overlay for OCR
+// ================================================================
+document.getElementById('snipBtn').onclick=openSnipMode;
+document.getElementById('snipClose').onclick=closeSnipMode;
+
+async function openSnipMode(){
+    if(activeIdx<0||!filtered[activeIdx]){showToast('Open a PDF first','error');return;}
+    var pdf=filtered[activeIdx];
+    try{
+        snipPdfDoc=await pdfjsLib.getDocument({data:pdf.data.slice(0)}).promise;
+        snipTotalPages=snipPdfDoc.numPages;
+        snipPage=1;
+        document.getElementById('snipTotalPages').textContent=snipTotalPages;
+        snipModal.classList.add('active');
+        await renderSnipPage();
+    }catch(e){
+        console.error('Snip load error',e);
+        showToast('Error loading PDF for snipping','error');
+    }
+}
+
+function closeSnipMode(){
+    snipModal.classList.remove('active');
+    snipPdfDoc=null;
+    // Remove any lingering snip rect
+    if(snipRectEl&&snipRectEl.parentNode) snipRectEl.parentNode.removeChild(snipRectEl);
+    snipRectEl=null;
+}
+
+async function renderSnipPage(){
+    if(!snipPdfDoc) return;
+    var page=await snipPdfDoc.getPage(snipPage);
+    var vp=page.getViewport({scale:renderScale});
+    snipCanvas.width=vp.width;
+    snipCanvas.height=vp.height;
+    // Display at logical size
+    var logicalW=vp.width/renderScale;
+    var logicalH=vp.height/renderScale;
+    // Fit to container width
+    var availW=snipWrap.clientWidth-40;
+    if(logicalW>availW){
+        var ratio=availW/logicalW;
+        snipCanvas.style.width=(logicalW*ratio)+'px';
+        snipCanvas.style.height=(logicalH*ratio)+'px';
+    } else {
+        snipCanvas.style.width=logicalW+'px';
+        snipCanvas.style.height=logicalH+'px';
+    }
+    await page.render({canvasContext:snipCtx, viewport:vp}).promise;
+    document.getElementById('snipPageInput').value=snipPage;
+    document.getElementById('snipPrevPage').disabled=(snipPage<=1);
+    document.getElementById('snipNextPage').disabled=(snipPage>=snipTotalPages);
+}
+
+document.getElementById('snipPrevPage').onclick=function(){ if(snipPage>1){snipPage--;renderSnipPage();} };
+document.getElementById('snipNextPage').onclick=function(){ if(snipPage<snipTotalPages){snipPage++;renderSnipPage();} };
+document.getElementById('snipPageInput').onchange=function(e){
+    var p=parseInt(e.target.value);
+    if(p>=1&&p<=snipTotalPages){snipPage=p;renderSnipPage();}
+    else{e.target.value=snipPage;}
+};
+
+// Snip drawing on canvas
+snipCanvas.addEventListener('mousedown',function(e){
+    if(!snipPdfDoc) return;
+    var rect=snipCanvas.getBoundingClientRect();
+    snipStartPos={x:e.clientX-rect.left, y:e.clientY-rect.top};
+
+    // Create rect element
+    if(snipRectEl&&snipRectEl.parentNode) snipRectEl.parentNode.removeChild(snipRectEl);
+    snipRectEl=document.createElement('div');
+    snipRectEl.className='snip-rect';
+    snipRectEl.style.display='none';
+
+    // Position relative to canvas inside wrap
+    snipWrap.style.position='relative';
+    snipWrap.appendChild(snipRectEl);
+});
+
+snipCanvas.addEventListener('mousemove',function(e){
+    if(!snipStartPos||!snipRectEl) return;
+    var rect=snipCanvas.getBoundingClientRect();
+    var cx=e.clientX-rect.left;
+    var cy=e.clientY-rect.top;
+
+    var x=Math.min(snipStartPos.x,cx);
+    var y=Math.min(snipStartPos.y,cy);
+    var w=Math.abs(cx-snipStartPos.x);
+    var h=Math.abs(cy-snipStartPos.y);
+
+    // Convert to wrap-relative coords
+    var canvasRect=snipCanvas.getBoundingClientRect();
+    var wrapRect=snipWrap.getBoundingClientRect();
+    var offX=canvasRect.left-wrapRect.left+snipWrap.scrollLeft;
+    var offY=canvasRect.top-wrapRect.top+snipWrap.scrollTop;
+
+    snipRectEl.style.left=(offX+x)+'px';
+    snipRectEl.style.top=(offY+y)+'px';
+    snipRectEl.style.width=w+'px';
+    snipRectEl.style.height=h+'px';
+    snipRectEl.style.display='block';
+});
+
+snipCanvas.addEventListener('mouseup',async function(e){
+    if(!snipStartPos) return;
+    var rect=snipCanvas.getBoundingClientRect();
+    var cx=e.clientX-rect.left;
+    var cy=e.clientY-rect.top;
+
+    var x=Math.min(snipStartPos.x,cx);
+    var y=Math.min(snipStartPos.y,cy);
+    var w=Math.abs(cx-snipStartPos.x);
+    var h=Math.abs(cy-snipStartPos.y);
+    snipStartPos=null;
+
+    if(w<5||h<5){
+        if(snipRectEl&&snipRectEl.parentNode) snipRectEl.parentNode.removeChild(snipRectEl);
+        snipRectEl=null;
+        return;
+    }
+
+    // Map display coords to canvas pixel coords
+    var scaleX=snipCanvas.width/parseFloat(snipCanvas.style.width);
+    var scaleY=snipCanvas.height/parseFloat(snipCanvas.style.height);
+    var sx=Math.max(0,x*scaleX);
+    var sy=Math.max(0,y*scaleY);
+    var sw=Math.min(w*scaleX,snipCanvas.width-sx);
+    var sh=Math.min(h*scaleY,snipCanvas.height-sy);
+
+    if(sw<5||sh<5) return;
+
+    // Crop
+    var crop=document.createElement('canvas');
+    crop.width=sw; crop.height=sh;
+    crop.getContext('2d').drawImage(snipCanvas,sx,sy,sw,sh,0,0,sw,sh);
+    var dataUrl=crop.toDataURL('image/png');
+
+    // Show OCR popup
+    document.getElementById('ocrSnipImg').src=dataUrl;
+    document.getElementById('ocrText').value='Running OCR...';
+    ocrPopup.classList.add('active');
+
+    // Clean up rect
+    if(snipRectEl&&snipRectEl.parentNode) snipRectEl.parentNode.removeChild(snipRectEl);
+    snipRectEl=null;
+
+    await runOCR(dataUrl);
+});
+
+// ================================================================
+//  OCR — Nanonets
+// ================================================================
+async function runOCR(dataUrl){
+    var apiKey=await getSetting('nanonetsApiKey');
+    var modelId=await getSetting('nanonetsModelId');
+    if(!apiKey||!modelId){
+        document.getElementById('ocrText').value='\u26A0\uFE0F Nanonets API Key / Model ID not set.\n\nGo to \u2699\uFE0F Settings to add them.';
+        return;
+    }
+    try{
+        var resp=await fetch(dataUrl);
+        var blob=await resp.blob();
+        var fd=new FormData(); fd.append('file',blob,'snip.png');
+        var ocrResp=await fetch('https://app.nanonets.com/api/v2/OCR/Model/'+modelId+'/LabelFile/',{
+            method:'POST',
+            headers:{'Authorization':'Basic '+btoa(apiKey+':')},
+            body:fd
+        });
+        if(!ocrResp.ok){
+            document.getElementById('ocrText').value='\u274C OCR Error ('+ocrResp.status+'): '+await ocrResp.text();
+            return;
+        }
+        var data=await ocrResp.json();
+        var text='';
+        if(data.result&&data.result.length>0){
+            var preds=data.result[0].prediction||[];
+            if(preds.length) text=preds.map(function(p){return p.ocr_text||p.text||'';}).filter(function(t){return t;}).join('\n');
+            if(!text&&data.result[0].page_data) text=data.result[0].page_data.map(function(p){return p.raw_text||'';}).join('\n');
+        }
+        if(!text) text=JSON.stringify(data,null,2);
+        document.getElementById('ocrText').value=text;
+    }catch(err){
+        document.getElementById('ocrText').value='\u274C Error: '+err.message;
+    }
+}
+
+// OCR popup
+document.getElementById('ocrClose').onclick=document.getElementById('ocrClose2').onclick=function(){ocrPopup.classList.remove('active');};
+document.getElementById('ocrCopy').onclick=function(){
+    navigator.clipboard.writeText(document.getElementById('ocrText').value).then(function(){showToast('Copied!','success');});
+};
+
+// ================================================================
+//  Settings
+// ================================================================
+document.getElementById('settingsBtn').onclick=async function(){
+    document.getElementById('settApiKey').value=await getSetting('nanonetsApiKey');
+    document.getElementById('settModelId').value=await getSetting('nanonetsModelId');
+    document.getElementById('settScale').value=renderScale;
+    updateStorageInfo();
+    settingsOv.classList.add('active');
+};
+document.getElementById('settingsClose').onclick=function(){settingsOv.classList.remove('active');};
+settingsOv.onclick=function(e){if(e.target===settingsOv) settingsOv.classList.remove('active');};
+document.getElementById('settSave').onclick=async function(){
+    await setSetting('nanonetsApiKey',document.getElementById('settApiKey').value.trim());
+    await setSetting('nanonetsModelId',document.getElementById('settModelId').value.trim());
+    renderScale=Math.max(1,Math.min(4,parseFloat(document.getElementById('settScale').value)||2));
+    await setSetting('renderScale',String(renderScale));
+    settingsOv.classList.remove('active');
+    showToast('Settings saved!','success');
+};
+document.getElementById('settClearDb').onclick=async function(){
+    if(!confirm('Clear ALL stored PDFs and settings?')) return;
+    await dbClear(S_FILES); await dbClear(S_SETTINGS);
+    pdfs=[]; filtered=[]; activeIdx=-1;
+    renderList(); updateStats(); showEmpty();
+    settingsOv.classList.remove('active');
+    showToast('Storage cleared','success');
+};
+
+async function updateStorageInfo(){
+    var el=document.getElementById('storageInfo');
+    var sz=pdfs.reduce(function(s,p){return s+(p.size||0);},0);
+    var t=pdfs.length+' files, '+formatSize(sz)+' stored';
+    if(navigator.storage&&navigator.storage.estimate){
+        var est=await navigator.storage.estimate();
+        t+=' | Quota: '+formatSize(est.usage)+' / '+formatSize(est.quota);
+    }
+    el.textContent=t;
+}
+
+// ================================================================
+//  Sidebar resize & toggle
+// ================================================================
+document.getElementById('toggleSidebar').onclick=function(){document.getElementById('sidebar').classList.toggle('hidden');};
+var resizeHandle=document.getElementById('resizeHandle'), isResizing=false;
+resizeHandle.onmousedown=function(){isResizing=true;document.body.style.cursor='col-resize';};
+document.addEventListener('mousemove',function(e){if(!isResizing)return;document.getElementById('sidebar').style.width=Math.max(180,Math.min(500,e.clientX))+'px';});
+document.addEventListener('mouseup',function(){isResizing=false;document.body.style.cursor='';});
+
+// ================================================================
+//  Keyboard Shortcuts
+// ================================================================
+document.addEventListener('keydown',function(e){
+    // Don't capture when typing in inputs
+    if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
+
+    // Snip modal open — only handle Escape and page nav
+    if(snipModal.classList.contains('active')){
+        if(e.key==='Escape') closeSnipMode();
+        return; // Let scrolling work naturally in snip overlay
+    }
+
+    // File navigation: Left / Right
+    if(e.key==='ArrowLeft'){e.preventDefault();selectPdf(activeIdx-1);}
+    if(e.key==='ArrowRight'){e.preventDefault();selectPdf(activeIdx+1);}
+
+    // Snip toggle
+    if(e.key==='x'||e.key==='X') openSnipMode();
+
+    // Sidebar toggle
+    if(e.key==='s'||e.key==='S') document.getElementById('sidebar').classList.toggle('hidden');
+
+    // Delete current file
+    if(e.key==='Delete'&&activeIdx>=0&&filtered[activeIdx]){
+        if(confirm('Delete "'+filtered[activeIdx].name+'"?')) deleteFile(filtered[activeIdx],activeIdx);
+    }
+
+    // Close popups
+    if(e.key==='Escape'){
+        if(ocrPopup.classList.contains('active')) ocrPopup.classList.remove('active');
+        if(settingsOv.classList.contains('active')) settingsOv.classList.remove('active');
+    }
+});
+
+// ================================================================
+//  Utilities
+// ================================================================
+function updateStats(){
+    var n=pdfs.length, sz=pdfs.reduce(function(s,p){return s+(p.size||0);},0);
+    statsEl.innerHTML=n>0?'<span><b>'+n+'</b> PDFs</span><span><b>'+formatSize(sz)+'</b></span>':'';
+}
+function showToast(msg,type){
+    toastEl.textContent=msg;
+    toastEl.className='toast show '+(type||'');
+    clearTimeout(toastEl._t);
+    toastEl._t=setTimeout(function(){toastEl.className='toast';},2500);
+}
+function formatSize(b){
+    if(!b)return '0 B';
+    if(b<1024)return b+' B';
+    if(b<1048576)return(b/1024).toFixed(1)+' KB';
+    return(b/1048576).toFixed(1)+' MB';
+}
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+</script>
+</body>
+</html>
