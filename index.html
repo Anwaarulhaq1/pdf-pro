@@ -21,10 +21,12 @@
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
-/* ── Topbar ── */
-.topbar { background: var(--surface); padding: 6px 12px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; z-index: 100; }
-.topbar h1 { font-size: 15px; color: var(--accent); white-space: nowrap; letter-spacing: -.3px; }
-.topbar h1 span { color: var(--muted); font-weight: 400; font-size: 11px; margin-left: 4px; }
+/* ── Sidebar Headers & Actions ── */
+.sidebar-top { padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+.sidebar-top h1 { font-size: 15px; color: var(--accent); white-space: nowrap; letter-spacing: -.3px; }
+.sidebar-top h1 span { color: var(--muted); font-weight: 400; font-size: 11px; margin-left: 4px; }
+.sidebar-actions { padding: 8px; display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--border); }
+.sidebar-actions .btn { flex: 1; min-width: 45%; justify-content: center; font-size: 11px; padding: 5px 8px; }
 .btn { background: var(--surface2); color: var(--text); border: 1px solid var(--border); padding: 5px 12px; border-radius: var(--radius); cursor: pointer; font-size: 12px; white-space: nowrap; transition: all .15s; display: inline-flex; align-items: center; gap: 4px; }
 .btn:hover { border-color: var(--accent); background: #1f2937; }
 .btn.danger:hover { border-color: var(--red); color: var(--red); }
@@ -40,12 +42,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .main { display: flex; flex: 1; overflow: hidden; }
 
 /* ── Sidebar ── */
-.sidebar { width: 280px; min-width: 220px; max-width: 400px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; transition: width .2s; }
+.sidebar { width: 280px; min-width: 220px; max-width: 400px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; transition: width .2s, min-width .2s; }
 .sidebar.hidden { width: 0; min-width: 0; overflow: hidden; border-right: none; }
 .sidebar-header { padding: 8px; border-bottom: 1px solid var(--border); display: flex; gap: 6px; align-items: center; }
 .sidebar-header input { flex:1; padding: 5px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 12px; outline: none; }
 .sidebar-header input:focus { border-color: var(--accent); }
 .sidebar-header .sort-btn { font-size: 11px; padding: 4px 8px; }
+.floating-toggle { position: absolute; top: 12px; left: 12px; z-index: 100; background: var(--surface2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,.5); display: none; transition: background .15s; }
+.floating-toggle:hover { border-color: var(--accent); background: #1f2937; }
 .file-list { flex: 1; overflow-y: auto; }
 .file-item { padding: 8px 10px; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 12px; display: flex; align-items: center; gap: 6px; transition: background .1s; position: relative; }
 .file-item:hover { background: var(--surface2); }
@@ -129,7 +133,10 @@ kbd { display: inline-block; background: var(--surface2); padding: 1px 5px; bord
 .sidebar-folders { padding: 4px 8px; border-bottom: 1px solid var(--border); }
 .folder-select { width: 100%; padding: 4px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 11px; cursor: pointer; }
 .folder-select:focus { border-color: var(--accent); outline: none; }
-.folder-group { padding: 6px 10px; font-size: 10px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: .4px; background: var(--surface2); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 4px; }
+.folder-group { padding: 6px 10px; font-size: 10px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: .4px; background: var(--surface2); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; transition: background .15s; }
+.folder-group:hover { background: var(--surface); }
+.folder-group .chevron { font-size: 8px; margin-right: 4px; transition: transform .2s; }
+.folder-group.collapsed .chevron { transform: rotate(-90deg); }
 .folder-group .folder-icon { font-size: 12px; }
 .folder-group .folder-count { margin-left: auto; color: var(--muted); font-weight: 400; font-size: 10px; }
 .file-item .file-path { font-size: 9px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -137,32 +144,30 @@ kbd { display: inline-block; background: var(--surface2); padding: 1px 5px; bord
 </head>
 <body>
 
-<!-- ═══ Topbar ═══ -->
-<div class="topbar">
-    <h1>PDF Viewer <span>Pro</span></h1>
-    <button class="btn" id="loadFolderBtn">&#128193; Folder</button>
-    <button class="btn" id="loadFilesBtn">&#128196; Files</button>
-    <div class="sep"></div>
-    <button class="btn btn-icon" id="toggleSidebar" title="Toggle sidebar (S)">&#9776;</button>
-    <button class="btn" id="snipBtn" title="Snip &amp; OCR (X) &#8212; opens PDF.js overlay to draw &amp; OCR">&#9986; Snip</button>
-    <button class="btn danger" id="clearAllBtn" title="Remove all files">&#128465; Clear</button>
-    <div class="sep"></div>
-    <button class="btn btn-icon" id="settingsBtn" title="Settings">&#9881;</button>
-    <div class="stats" id="stats"></div>
-</div>
-
 <!-- ═══ Main ═══ -->
+<button class="floating-toggle" id="floatingToggle" title="Show sidebar (S)">&#9776;</button>
 <div class="main">
     <!-- Sidebar -->
     <div class="sidebar" id="sidebar">
-        <div class="sidebar-header">
-            <input type="text" id="searchInput" placeholder="Search files...">
-            <button class="btn sort-btn" id="sortBtn" title="Sort files">A&#8595;</button>
+        <div class="sidebar-top">
+            <h1>PDF Viewer <span>Pro</span></h1>
+            <button class="btn btn-icon" id="toggleSidebar" title="Hide sidebar (S)">&#9776;</button>
+        </div>
+        <div class="sidebar-actions">
+            <button class="btn" id="loadFolderBtn" title="Load a folder of PDFs">&#128193; Folder</button>
+            <button class="btn" id="loadFilesBtn" title="Load specific PDFs">&#128196; Files</button>
+            <button class="btn" id="snipBtn" title="Snip & OCR (X)">&#9986; Snip</button>
+            <button class="btn btn-icon" id="settingsBtn" title="Settings">&#9881;</button>
+            <button class="btn danger" id="clearAllBtn" title="Remove all files" style="flex-basis: 100%;">&#128465; Clear Storage</button>
         </div>
         <div class="sidebar-folders" id="folderFilter" style="display:none">
             <select id="folderSelect" class="folder-select" title="Filter by folder">
                 <option value="">All folders</option>
             </select>
+        </div>
+        <div class="sidebar-header">
+            <input type="text" id="searchInput" placeholder="Search files...">
+            <button class="btn sort-btn" id="sortBtn" title="Sort files">A&#8595;</button>
         </div>
         <div class="file-list" id="fileList"></div>
     </div>
@@ -310,9 +315,10 @@ var pdfs = [];           // {id, name, path, folder, size, data: ArrayBuffer}
 var filtered = [];
 var activeIdx = -1;
 var activeBlobUrl = null;
-var sortAsc = true;
+var sortMode = 0; // 0: A-Z, 1: Z-A, 2: Time Asc, 3: Time Desc
 var renderScale = 2;
 var activeFolder = '';   // empty = show all
+var collapsedFolders = new Set();
 
 // Snip state
 var snipPdfDoc = null;
@@ -342,10 +348,12 @@ var settingsOv = document.getElementById('settingsOverlay');
 // ================================================================
 (async function init() {
     renderScale = parseFloat(await getSetting('renderScale','2')) || 2;
+    sortMode = parseInt(await getSetting('sortMode','0')) || 0;
+    document.getElementById('sortBtn').textContent = ['A\u2193', 'Z\u2193', '\uD83D\uDD52\u2191', '\uD83D\uDD52\u2193'][sortMode];
     try {
         var stored = await dbGetAll(S_FILES);
         if (stored.length > 0) {
-            pdfs = stored.map(function(s){ return {id:s.id, name:s.name, path:s.path||'', folder:s.folder||'', size:s.size, data:s.data}; });
+            pdfs = stored.map(function(s){ return {id:s.id, name:s.name, path:s.path||'', folder:s.folder||'', size:s.size, data:s.data, lastModified:s.lastModified, dateAdded:s.dateAdded}; });
             filtered = pdfs.slice();
             sortFiles(); buildFolderFilter(); renderList(); updateStats();
             showToast('Loaded ' + pdfs.length + ' PDFs from storage', 'success');
@@ -413,7 +421,7 @@ async function addFiles(fileListIn){
         var uniqueKey = displayPath || f.name;
         if(pdfs.some(function(p){return (p.path||p.name)===uniqueKey;})) continue;
         var data=await f.arrayBuffer();
-        var entry={name:f.name, path: uniqueKey, folder: folder, size:f.size, data:data};
+        var entry={name:f.name, path: uniqueKey, folder: folder, size:f.size, data:data, lastModified:f.lastModified, dateAdded:Date.now()};
         entry.id=await dbPut(S_FILES, entry);
         pdfs.push(entry);
         added++;
@@ -430,17 +438,26 @@ async function addFiles(fileListIn){
 // ================================================================
 function sortFiles(){
     filtered.sort(function(a,b){
-        // Sort by folder first, then by name within folder
+        // Folders are always grouped alphabetically
         var fa = (a.folder||'').toLowerCase(), fb = (b.folder||'').toLowerCase();
-        if(fa !== fb) return sortAsc ? fa.localeCompare(fb) : fb.localeCompare(fa);
-        var c=a.name.localeCompare(b.name,undefined,{numeric:true});
-        return sortAsc?c:-c;
+        if(fa !== fb) return fa.localeCompare(fb);
+        
+        // Items within folders
+        if (sortMode === 0 || sortMode === 1) { // Alpha
+            var c = a.name.localeCompare(b.name, undefined, {numeric: true});
+            return sortMode === 0 ? c : -c;
+        } else { // Time
+            var ta = a.lastModified || a.dateAdded || 0;
+            var tb = b.lastModified || b.dateAdded || 0;
+            return sortMode === 2 ? ta - tb : tb - ta;
+        }
     });
 }
-document.getElementById('sortBtn').onclick=function(){
-    sortAsc=!sortAsc;
-    document.getElementById('sortBtn').textContent=sortAsc?'A\u2193':'Z\u2193';
+document.getElementById('sortBtn').onclick = async function(){
+    sortMode = (sortMode + 1) % 4;
+    document.getElementById('sortBtn').textContent = ['A\u2193', 'Z\u2193', '\uD83D\uDD52\u2191', '\uD83D\uDD52\u2193'][sortMode];
     sortFiles(); renderList();
+    await setSetting('sortMode', sortMode.toString());
 };
 searchInput.addEventListener('input',function(){
     var q=searchInput.value.toLowerCase().trim();
@@ -482,12 +499,21 @@ function renderList(){
         var folder=pdf.folder||'';
         if(folder && folder!==lastFolder){
             lastFolder=folder;
+            var isCollapsed=collapsedFolders.has(folder);
             var count=filtered.filter(function(p){return (p.folder||'')===folder;}).length;
             var grp=document.createElement('div');
-            grp.className='folder-group';
-            grp.innerHTML='<span class="folder-icon">\uD83D\uDCC1</span> '+esc(folder)+'<span class="folder-count">'+count+'</span>';
+            grp.className='folder-group'+(isCollapsed?' collapsed':'');
+            grp.innerHTML='<span class="chevron">&#9660;</span><span class="folder-icon">\uD83D\uDCC1</span> '+esc(folder)+'<span class="folder-count">'+count+'</span>';
+            grp.onclick=(function(f){return function(){
+                if(collapsedFolders.has(f)) collapsedFolders.delete(f);
+                else collapsedFolders.add(f);
+                renderList();
+            };})(folder);
             fileList.appendChild(grp);
         }
+        
+        if (collapsedFolders.has(folder)) return;
+
         var div=document.createElement('div');
         div.className='file-item'+(i===activeIdx?' active':'');
         div.innerHTML=
@@ -800,7 +826,15 @@ async function updateStorageInfo(){
 // ================================================================
 //  Sidebar resize & toggle
 // ================================================================
-document.getElementById('toggleSidebar').onclick=function(){document.getElementById('sidebar').classList.toggle('hidden');};
+function handleSidebarToggle() {
+    var sb = document.getElementById('sidebar');
+    var fb = document.getElementById('floatingToggle');
+    sb.classList.toggle('hidden');
+    fb.style.display = sb.classList.contains('hidden') ? 'block' : 'none';
+}
+document.getElementById('toggleSidebar').onclick = handleSidebarToggle;
+document.getElementById('floatingToggle').onclick = handleSidebarToggle;
+
 var resizeHandle=document.getElementById('resizeHandle'), isResizing=false;
 resizeHandle.onmousedown=function(){isResizing=true;document.body.style.cursor='col-resize';};
 document.addEventListener('mousemove',function(e){if(!isResizing)return;document.getElementById('sidebar').style.width=Math.max(180,Math.min(500,e.clientX))+'px';});
