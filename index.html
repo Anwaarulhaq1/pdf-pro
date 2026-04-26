@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PDF Viewer Pro</title>
+<title>PDF Pro Viewer</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
 :root {
@@ -16,6 +16,7 @@
     --accent:   #58a6ff;
     --red:      #f85149;
     --green:    #3fb950;
+    --orange:   #d29922;
     --radius:   6px;
 }
 * { margin:0; padding:0; box-sizing:border-box; }
@@ -48,6 +49,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .sidebar-header input { flex:1; padding: 5px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 12px; outline: none; }
 .sidebar-header input:focus { border-color: var(--accent); }
 .sidebar-header .sort-btn { font-size: 11px; padding: 4px 8px; }
+.sidebar > .stats { padding: 6px 10px; border-bottom: 1px solid var(--border); margin-left: 0; flex-wrap: wrap; gap: 6px 10px; }
 .floating-toggle { position: absolute; top: 12px; left: 12px; z-index: 100; background: var(--surface2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,.5); display: none; transition: background .15s; }
 .floating-toggle:hover { border-color: var(--accent); background: #1f2937; }
 .file-list { flex: 1; overflow-y: auto; }
@@ -57,6 +59,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .file-item .icon { font-size: 14px; flex-shrink: 0; }
 .file-item .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; cursor: pointer; }
 .file-item .size { color: var(--muted); font-size: 10px; flex-shrink: 0; }
+.file-item .badge { color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 5px; font-size: 9px; line-height: 1.2; flex-shrink: 0; text-transform: uppercase; }
+.file-item.unsupported .badge { color: var(--orange); border-color: rgba(210,153,34,.5); }
 .file-item .del-btn { display: none; background: none; border: none; color: var(--red); cursor: pointer; font-size: 14px; padding: 2px 4px; flex-shrink: 0; border-radius: 3px; }
 .file-item:hover .del-btn { display: block; }
 .file-item:hover .size { display: none; }
@@ -76,6 +80,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .empty p { font-size: 14px; }
 .drop-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 36px; text-align: center; cursor: pointer; transition: border-color .2s; }
 .drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); }
+.unsupported-card { max-width: 560px; text-align: center; padding: 28px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: 0 8px 30px rgba(0,0,0,.2); }
+.unsupported-card .big-icon { font-size: 48px; opacity: .7; margin-bottom: 10px; }
+.unsupported-card h2 { font-size: 18px; color: var(--text); margin-bottom: 8px; }
+.unsupported-card p { font-size: 13px; color: var(--muted); line-height: 1.5; margin-bottom: 10px; }
+.unsupported-card .meta { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin: 14px 0; }
+.unsupported-card .meta span { border: 1px solid var(--border); border-radius: 999px; padding: 4px 8px; color: var(--muted); font-size: 11px; }
 
 /* ── Snip Overlay (full-screen over iframe) ── */
 .snip-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.85); z-index: 300; display: none; flex-direction: column; }
@@ -150,12 +160,12 @@ kbd { display: inline-block; background: var(--surface2); padding: 1px 5px; bord
     <!-- Sidebar -->
     <div class="sidebar" id="sidebar">
         <div class="sidebar-top">
-            <h1>PDF Viewer <span>Pro</span></h1>
+            <h1>PDF Pro <span>Viewer</span></h1>
             <button class="btn btn-icon" id="toggleSidebar" title="Hide sidebar (S)">&#9776;</button>
         </div>
         <div class="sidebar-actions">
-            <button class="btn" id="loadFolderBtn" title="Load a folder of PDFs">&#128193; Folder</button>
-            <button class="btn" id="loadFilesBtn" title="Load specific PDFs">&#128196; Files</button>
+            <button class="btn" id="loadFolderBtn" title="Load a folder of PDF and Adobe files">&#128193; Folder</button>
+            <button class="btn" id="loadFilesBtn" title="Load PDF and Adobe files">&#128196; Files</button>
             <button class="btn" id="snipBtn" title="Snip & OCR (X)">&#9986; Snip</button>
             <button class="btn btn-icon" id="settingsBtn" title="Settings">&#9881;</button>
             <button class="btn danger" id="clearAllBtn" title="Remove all files" style="flex-basis: 100%;">&#128465; Clear Storage</button>
@@ -169,6 +179,7 @@ kbd { display: inline-block; background: var(--surface2); padding: 1px 5px; bord
             <input type="text" id="searchInput" placeholder="Search files...">
             <button class="btn sort-btn" id="sortBtn" title="Sort files">A&#8595;</button>
         </div>
+        <div class="stats" id="stats"></div>
         <div class="file-list" id="fileList"></div>
     </div>
     <div class="resize-handle" id="resizeHandle"></div>
@@ -187,9 +198,9 @@ kbd { display: inline-block; background: var(--surface2); padding: 1px 5px; bord
         <div class="empty" id="emptyState">
             <div class="drop-zone" id="dropZone">
                 <div class="big-icon">&#128196;</div>
-                <p>Drop PDF folder here</p>
+                <p>Drop PDF, TMP, or Adobe files here</p>
                 <p style="font-size:12px; color:var(--muted); margin-top:4px">or click <b>Folder</b> / <b>Files</b> above</p>
-                <p style="font-size:11px; color:var(--muted); margin-top:12px">Files persist in browser storage across sessions</p>
+                <p style="font-size:11px; color:var(--muted); margin-top:12px">PDF-family files open in-browser. Other Adobe formats are stored and listed.</p>
             </div>
         </div>
     </div>
@@ -261,7 +272,7 @@ kbd { display: inline-block; background: var(--surface2); padding: 1px 5px; bord
 
 <!-- Hidden file inputs -->
 <input type="file" id="folderInput" webkitdirectory multiple style="display:none">
-<input type="file" id="filesInput" multiple accept=".pdf,.tmp" style="display:none">
+<input type="file" id="filesInput" multiple style="display:none">
 
 <script>
 // ================================================================
@@ -274,6 +285,16 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 //  IndexedDB
 // ================================================================
 var DB_NAME = 'PDFViewerPro', DB_VER = 1, S_FILES = 'files', S_SETTINGS = 'settings';
+var ADOBE_FILE_TYPES = {
+    pdf:{ label:'PDF', kind:'pdf', icon:'\uD83D\uDCC4' }, tmp:{ label:'TMP', kind:'pdf', icon:'\uD83D\uDCC4' },
+    ai:{ label:'AI', kind:'adobe', icon:'\uD83C\uDFA8' }, ait:{ label:'AIT', kind:'adobe', icon:'\uD83C\uDFA8' }, ps:{ label:'PS', kind:'adobe', icon:'\uD83D\uDCDD' }, eps:{ label:'EPS', kind:'adobe', icon:'\uD83D\uDCDD' },
+    fdf:{ label:'FDF', kind:'adobe', icon:'\uD83D\uDCCB' }, xdp:{ label:'XDP', kind:'adobe', icon:'\uD83D\uDCCB' }, xfdf:{ label:'XFDF', kind:'adobe', icon:'\uD83D\uDCCB' },
+    psd:{ label:'PSD', kind:'adobe', icon:'\uD83D\uDDBC' }, psb:{ label:'PSB', kind:'adobe', icon:'\uD83D\uDDBC' }, abr:{ label:'ABR', kind:'adobe', icon:'\uD83D\uDD8C' }, acv:{ label:'ACV', kind:'adobe', icon:'\uD83D\uDD8C' }, atn:{ label:'ATN', kind:'adobe', icon:'\uD83D\uDD8C' }, pat:{ label:'PAT', kind:'adobe', icon:'\uD83D\uDD8C' }, grd:{ label:'GRD', kind:'adobe', icon:'\uD83D\uDD8C' }, asl:{ label:'ASL', kind:'adobe', icon:'\uD83D\uDD8C' }, csh:{ label:'CSH', kind:'adobe', icon:'\uD83D\uDD8C' }, tpl:{ label:'TPL', kind:'adobe', icon:'\uD83D\uDD8C' },
+    indd:{ label:'INDD', kind:'adobe', icon:'\uD83D\uDCD0' }, indt:{ label:'INDT', kind:'adobe', icon:'\uD83D\uDCD0' }, indb:{ label:'INDB', kind:'adobe', icon:'\uD83D\uDCD0' }, inx:{ label:'INX', kind:'adobe', icon:'\uD83D\uDCD0' }, idml:{ label:'IDML', kind:'adobe', icon:'\uD83D\uDCD0' }, icml:{ label:'ICML', kind:'adobe', icon:'\uD83D\uDCD0' },
+    aep:{ label:'AEP', kind:'adobe', icon:'\uD83C\uDFAC' }, aepx:{ label:'AEPX', kind:'adobe', icon:'\uD83C\uDFAC' }, aet:{ label:'AET', kind:'adobe', icon:'\uD83C\uDFAC' }, prproj:{ label:'PRPROJ', kind:'adobe', icon:'\uD83C\uDFA5' }, prfpset:{ label:'PRFPSET', kind:'adobe', icon:'\uD83C\uDFA5' }, mogrt:{ label:'MOGRT', kind:'adobe', icon:'\uD83C\uDFA5' }, sesx:{ label:'SESX', kind:'adobe', icon:'\uD83C\uDFA7' },
+    xd:{ label:'XD', kind:'adobe', icon:'\uD83D\uDD8C' }, fla:{ label:'FLA', kind:'adobe', icon:'\uD83D\uDD8C' }, xfl:{ label:'XFL', kind:'adobe', icon:'\uD83D\uDD8C' }, swf:{ label:'SWF', kind:'adobe', icon:'\uD83D\uDD8C' },
+    acsm:{ label:'ACSM', kind:'adobe', icon:'\uD83D\uDCD6' }, dng:{ label:'DNG', kind:'adobe', icon:'\uD83D\uDCF7' }, lrcat:{ label:'LRCAT', kind:'adobe', icon:'\uD83D\uDCF7' }, lrtemplate:{ label:'LRTEMPLATE', kind:'adobe', icon:'\uD83D\uDCF7' }, xmp:{ label:'XMP', kind:'adobe', icon:'\uD83C\uDFF7' }, jsx:{ label:'JSX', kind:'adobe', icon:'\uD83D\uDCDC' }, jsxbin:{ label:'JSXBIN', kind:'adobe', icon:'\uD83D\uDCDC' }
+};
 
 function openDB() {
     return new Promise(function(resolve, reject) {
@@ -307,6 +328,35 @@ async function getSetting(key, fallback) {
     try { var all = await dbGetAll(S_SETTINGS); var f = all.find(function(i){return i.key===key;}); return f ? f.value : (fallback||''); } catch(e) { return fallback||''; }
 }
 async function setSetting(key, value) { return dbPut(S_SETTINGS, {key:key, value:value}); }
+function getFileName(input) {
+    return typeof input === 'string' ? input : ((input && input.name) || '');
+}
+function getExtension(input) {
+    var m = getFileName(input).toLowerCase().match(/\.([^.]+)$/);
+    return m ? m[1] : '';
+}
+function getFileType(input) {
+    var ext = getExtension(input);
+    var known = ADOBE_FILE_TYPES[ext];
+    if(known) return known;
+    var mime = typeof input === 'object' && input ? (input.type || '').toLowerCase() : '';
+    if(mime === 'application/pdf') return ADOBE_FILE_TYPES.pdf;
+    if(/adobe|postscript|photoshop|indesign|illustrator/.test(mime)) {
+        return { label:(ext || 'Adobe').toUpperCase(), kind:'adobe', icon:'\uD83D\uDCC1' };
+    }
+    return null;
+}
+function normalizeStoredFile(s) {
+    var type = getFileType(s) || ADOBE_FILE_TYPES.pdf;
+    s.ext = s.ext || getExtension(s);
+    s.type = s.type || type.label;
+    s.previewKind = s.previewKind || type.kind;
+    return s;
+}
+function isPreviewable(file) {
+    var type = getFileType(file);
+    return (file.previewKind || (type && type.kind)) === 'pdf';
+}
 
 // ================================================================
 //  State
@@ -353,10 +403,10 @@ var settingsOv = document.getElementById('settingsOverlay');
     try {
         var stored = await dbGetAll(S_FILES);
         if (stored.length > 0) {
-            pdfs = stored.map(function(s){ return {id:s.id, name:s.name, path:s.path||'', folder:s.folder||'', size:s.size, data:s.data, lastModified:s.lastModified, dateAdded:s.dateAdded}; });
+            pdfs = stored.map(function(s){ return normalizeStoredFile({id:s.id, name:s.name, path:s.path||'', folder:s.folder||'', size:s.size, data:s.data, lastModified:s.lastModified, dateAdded:s.dateAdded, ext:s.ext, type:s.type, previewKind:s.previewKind}); });
             filtered = pdfs.slice();
             sortFiles(); buildFolderFilter(); renderList(); updateStats();
-            showToast('Loaded ' + pdfs.length + ' PDFs from storage', 'success');
+            showToast('Loaded ' + pdfs.length + ' files from storage', 'success');
             if (pdfs.length > 0) selectPdf(0);
         }
     } catch(e) { console.error('DB load error', e); }
@@ -405,8 +455,8 @@ async function readEntries(entries){
 }
 
 async function addFiles(fileListIn){
-    var arr=Array.from(fileListIn).filter(function(f){ var n=f.name.toLowerCase(); return n.endsWith('.pdf') || n.endsWith('.tmp'); });
-    if(!arr.length){ showToast('No PDF or TMP files found','error'); return; }
+    var arr=Array.from(fileListIn).filter(function(f){ return !!getFileType(f); });
+    if(!arr.length){ showToast('No supported PDF or Adobe files found','error'); return; }
     var added=0;
     for(var i=0;i<arr.length;i++){
         var f=arr[i];
@@ -420,16 +470,17 @@ async function addFiles(fileListIn){
         var folder = pathParts.length > 1 ? pathParts.slice(0, -1).join('/') : '';
         var uniqueKey = displayPath || f.name;
         if(pdfs.some(function(p){return (p.path||p.name)===uniqueKey;})) continue;
+        var type = getFileType(f);
         var data=await f.arrayBuffer();
-        var entry={name:f.name, path: uniqueKey, folder: folder, size:f.size, data:data, lastModified:f.lastModified, dateAdded:Date.now()};
+        var entry={name:f.name, path: uniqueKey, folder: folder, size:f.size, data:data, lastModified:f.lastModified, dateAdded:Date.now(), ext:getExtension(f.name), type:type.label, previewKind:type.kind};
         entry.id=await dbPut(S_FILES, entry);
         pdfs.push(entry);
         added++;
     }
     filtered=pdfs.slice(); sortFiles(); renderList(); updateStats(); updateStorageInfo(); buildFolderFilter();
     if(added>0){
-        showToast('Added '+added+' PDF'+(added>1?'s':'')+' ('+pdfs.length+' total)','success');
-        if(activeIdx===-1) selectPdf(0);
+        showToast('Added '+added+' file'+(added>1?'s':'')+' ('+pdfs.length+' total)','success');
+        if(filtered.length) selectPdf(activeIdx >= 0 && activeIdx < filtered.length ? activeIdx : 0);
     } else { showToast('All files already loaded','error'); }
 }
 
@@ -441,7 +492,7 @@ function sortFiles(){
         // Folders are always grouped alphabetically
         var fa = (a.folder||'').toLowerCase(), fb = (b.folder||'').toLowerCase();
         if(fa !== fb) return fa.localeCompare(fb);
-        
+
         // Items within folders
         if (sortMode === 0 || sortMode === 1) { // Alpha
             var c = a.name.localeCompare(b.name, undefined, {numeric: true});
@@ -511,18 +562,19 @@ function renderList(){
             };})(folder);
             fileList.appendChild(grp);
         }
-        
+
         if (collapsedFolders.has(folder)) return;
 
         var div=document.createElement('div');
-        div.className='file-item'+(i===activeIdx?' active':'');
+        div.className='file-item'+(i===activeIdx?' active':'')+(isPreviewable(pdf)?'':' unsupported');
         div.innerHTML=
             '<span class="idx">'+(i+1)+'</span>'+
-            '<span class="icon">\uD83D\uDCC4</span>'+
+            '<span class="icon">'+esc((getFileType(pdf.name)||{}).icon||'\uD83D\uDCC4')+'</span>'+
             '<span class="name" title="'+esc(pdf.path||pdf.name)+'">'+esc(pdf.name)+'</span>'+
+            '<span class="badge">'+esc(pdf.type||getExtension(pdf.name)||'file')+'</span>'+
             '<span class="size">'+formatSize(pdf.size)+'</span>'+
             '<button class="del-btn" title="Remove">\u2715</button>';
-        div.querySelector('.name').onclick=(function(idx){return function(){selectPdf(idx);};})(i);
+        div.onclick=(function(idx){return function(){selectPdf(idx);};})(i);
         div.querySelector('.del-btn').onclick=(function(p,idx){return function(e){e.stopPropagation();deleteFile(p,idx);};})(pdf,i);
         fileList.appendChild(div);
     });
@@ -539,7 +591,7 @@ async function deleteFile(pdf,idx){
 }
 
 document.getElementById('clearAllBtn').onclick=async function(){
-    if(!confirm('Delete ALL '+pdfs.length+' PDFs from storage?')) return;
+    if(!confirm('Delete ALL '+pdfs.length+' files from storage?')) return;
     await dbClear(S_FILES);
     pdfs=[]; filtered=[]; activeIdx=-1;
     renderList(); updateStats(); updateStorageInfo(); showEmpty();
@@ -550,11 +602,31 @@ function showEmpty(){
     viewerNav.style.display='none';
     pdfFrame.style.display='none';
     if(activeBlobUrl){ URL.revokeObjectURL(activeBlobUrl); activeBlobUrl=null; }
+    var unsupported=document.getElementById('unsupportedState');
+    if(unsupported) unsupported.remove();
     if(!document.getElementById('emptyState')){
         var e=document.createElement('div'); e.className='empty'; e.id='emptyState';
-        e.innerHTML='<div class="drop-zone" id="dropZone"><div class="big-icon">\uD83D\uDCC4</div><p>Drop PDF folder here</p></div>';
+        e.innerHTML='<div class="drop-zone" id="dropZone"><div class="big-icon">\uD83D\uDCC4</div><p>Drop PDF, TMP, or Adobe files here</p></div>';
         viewer.appendChild(e);
     } else { document.getElementById('emptyState').style.display=''; }
+}
+
+function showUnsupported(file){
+    var old=document.getElementById('unsupportedState');
+    if(old) old.remove();
+    var e=document.createElement('div');
+    e.className='empty';
+    e.id='unsupportedState';
+    var type = file.type || getExtension(file.name).toUpperCase() || 'Adobe';
+    e.innerHTML=
+        '<div class="unsupported-card">'+
+        '<div class="big-icon">'+esc((getFileType(file.name)||{}).icon||'\uD83D\uDCC1')+'</div>'+
+        '<h2>Stored '+esc(type)+' file</h2>'+
+        '<p><b>'+esc(file.name)+'</b> was imported and will stay in your library, but browsers cannot reliably preview this Adobe format without Adobe desktop software.</p>'+
+        '<div class="meta"><span>'+esc(type)+'</span><span>'+formatSize(file.size)+'</span></div>'+
+        '<p>PDF and PDF-like TMP files open directly here. For native Adobe formats, keep this as an organized library entry and open the original file in its Adobe app when editing is needed.</p>'+
+        '</div>';
+    viewer.appendChild(e);
 }
 
 // ================================================================
@@ -568,15 +640,29 @@ function selectPdf(idx){
     // Hide empty state
     var es=document.getElementById('emptyState'); if(es) es.style.display='none';
 
-    // Show nav + iframe
+    // Show nav
     viewerNav.style.display='';
-    pdfFrame.style.display='';
 
     document.getElementById('pdfTitle').textContent=(idx+1)+'/'+filtered.length+' \u2014 '+pdf.name;
     document.getElementById('prevFile').disabled=(idx===0);
     document.getElementById('nextFile').disabled=(idx===filtered.length-1);
 
-    // Create blob URL and load in iframe → Edge native PDF viewer
+    if(!isPreviewable(pdf)){
+        pdfFrame.style.display='none';
+        if(activeBlobUrl){ URL.revokeObjectURL(activeBlobUrl); activeBlobUrl=null; }
+        showUnsupported(pdf);
+        renderList();
+        var activeUnsupported=fileList.querySelector('.file-item.active');
+        if(activeUnsupported) activeUnsupported.scrollIntoView({block:'nearest'});
+        return;
+    }
+
+    var unsupported=document.getElementById('unsupportedState');
+    if(unsupported) unsupported.remove();
+    es=document.getElementById('emptyState'); if(es) es.style.display='none';
+    pdfFrame.style.display='';
+
+    // Create blob URL and load in iframe
     if(activeBlobUrl) URL.revokeObjectURL(activeBlobUrl);
     var blob=new Blob([pdf.data],{type:'application/pdf'});
     activeBlobUrl=URL.createObjectURL(blob);
@@ -599,6 +685,7 @@ document.getElementById('snipClose').onclick=closeSnipMode;
 async function openSnipMode(){
     if(activeIdx<0||!filtered[activeIdx]){showToast('Open a PDF first','error');return;}
     var pdf=filtered[activeIdx];
+    if(!isPreviewable(pdf)){showToast('Snip is available for PDF/TMP files only','error');return;}
     try{
         snipPdfDoc=await pdfjsLib.getDocument({data:pdf.data.slice(0)}).promise;
         snipTotalPages=snipPdfDoc.numPages;
@@ -815,7 +902,8 @@ document.getElementById('settClearDb').onclick=async function(){
 async function updateStorageInfo(){
     var el=document.getElementById('storageInfo');
     var sz=pdfs.reduce(function(s,p){return s+(p.size||0);},0);
-    var t=pdfs.length+' files, '+formatSize(sz)+' stored';
+    var previewable=pdfs.filter(isPreviewable).length;
+    var t=pdfs.length+' files, '+previewable+' browser-viewable, '+formatSize(sz)+' stored';
     if(navigator.storage&&navigator.storage.estimate){
         var est=await navigator.storage.estimate();
         t+=' | Quota: '+formatSize(est.usage)+' / '+formatSize(est.quota);
@@ -879,8 +967,8 @@ document.addEventListener('keydown',function(e){
 //  Utilities
 // ================================================================
 function updateStats(){
-    var n=pdfs.length, sz=pdfs.reduce(function(s,p){return s+(p.size||0);},0);
-    statsEl.innerHTML=n>0?'<span><b>'+n+'</b> PDFs</span><span><b>'+formatSize(sz)+'</b></span>':'';
+    var n=pdfs.length, previewable=pdfs.filter(isPreviewable).length, sz=pdfs.reduce(function(s,p){return s+(p.size||0);},0);
+    statsEl.innerHTML=n>0?'<span><b>'+n+'</b> files</span><span><b>'+previewable+'</b> viewable</span><span><b>'+formatSize(sz)+'</b></span>':'';
 }
 function showToast(msg,type){
     toastEl.textContent=msg;
